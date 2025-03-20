@@ -62,6 +62,7 @@ class KarutaImageFinder:
         self.tag_cards = {
             "burn": set(),
             "cute": set(),
+            "kot" : set(),
             "favorite": set(),
             "good": set(),
             "ok": set(),
@@ -147,10 +148,11 @@ class KarutaImageFinder:
             "favorite": "#ff9ff3", # Pink
             "good": "#1dd1a1",     # Green
             "ok": "#54a0ff",       # Blue
-            "wife": "#5f27cd"      # Purple
+            "wife": "#5f27cd",
+            "kot": "#8a2be2"      
         }
         
-        for tag in ["burn", "cute", "favorite", "good", "ok", "wife"]:
+        for tag in ["burn", "cute", "favorite", "good", "ok", "wife","kot"]:
             button = tk.Button(
                 tag_frame, 
                 text=tag.title(), 
@@ -255,6 +257,7 @@ class KarutaImageFinder:
         except Exception as e:
             messagebox.showerror("Error", f"Error browsing for file: {str(e)}")
     
+    # Modified load_file method to only load cards where tag column is empty
     def load_file(self):
         filepath = self.file_entry.get()
         if not filepath:
@@ -273,17 +276,27 @@ class KarutaImageFinder:
                 
             # Load the CSV file
             try:
-                self.cards_df = pd.read_csv(filepath)
+                # Load the full CSV first
+                full_df = pd.read_csv(filepath)
                 
                 # Check if required columns exist
                 required_cols = ['character', 'series', 'code', 'quality']
-                missing_cols = [col for col in required_cols if col not in self.cards_df.columns]
+                missing_cols = [col for col in required_cols if col not in full_df.columns]
                 
                 if missing_cols:
                     messagebox.showerror("Error", f"CSV is missing required columns: {', '.join(missing_cols)}")
                     self.status_var.set("Error: Invalid CSV format")
                     self.cards_df = None
                     return
+                
+                # Check if 'tag' column exists
+                if 'tag' not in full_df.columns:
+                    messagebox.showwarning("Warning", "No 'tag' column found in CSV. Unable to filter by empty tags.")
+                    self.cards_df = full_df
+                else:
+                    # Filter to only rows where tag is empty (NaN, None, or empty string)
+                    self.cards_df = full_df[full_df['tag'].isna() | (full_df['tag'] == '')]
+                    messagebox.showinfo("Info", f"Loaded {len(self.cards_df)} cards with empty tags out of {len(full_df)} total cards")
                 
                 # Convert quality to numeric if it's not already
                 if not pd.api.types.is_numeric_dtype(self.cards_df['quality']):
@@ -310,7 +323,7 @@ class KarutaImageFinder:
                     list_text = f"{bv} $ | {char_name} ({series_name})"
                     self.card_listbox.insert(tk.END, list_text)
                 
-                self.status_var.set(f"Loaded {len(self.cards_df)} cards from CSV")
+                self.status_var.set(f"Loaded {len(self.cards_df)} cards with empty tags")
             except pd.errors.EmptyDataError:
                 messagebox.showerror("Error", "CSV file is empty")
                 self.status_var.set("Error: Empty CSV file")
@@ -321,7 +334,6 @@ class KarutaImageFinder:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load CSV file: {str(e)}")
             self.status_var.set("Error loading CSV")
-    
     def filter_cards(self, event=None):
         search_term = self.search_entry.get().lower()
         
@@ -367,9 +379,8 @@ class KarutaImageFinder:
         if len(parts) < 2:
             return
             
-        char_series = parts[1]  # This contains "Character (Series)"
-        
-        # Extract character and series
+        char_series = parts[1]  
+
         char_end = char_series.rfind("(")
         if char_end > 0:
             char_name = char_series[:char_end].strip()
